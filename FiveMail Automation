@@ -1,0 +1,734 @@
+{
+  "name": "AI-Powered Multi-Account Email Outreach",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "name": "Schedule - Mon to Fri 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 400],
+      "notes": "Runs Monday to Friday at 9 AM"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileFormat": "autodetect",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "name": "Read Excel File",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [450, 400],
+      "notes": "Columns: Email, Website, Status, SentDate, SentFromAccount"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.Status}}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Filter Unsent Only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "maxItems": 100
+      },
+      "name": "Limit to 100 per Day",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assign email accounts in round-robin fashion\nconst emailAccounts = [\n  { id: '1', name: 'Account 1', email: 'account1@company.com' },\n  { id: '2', name: 'Account 2', email: 'account2@company.com' },\n  { id: '3', name: 'Account 3', email: 'account3@company.com' },\n  { id: '4', name: 'Account 4', email: 'account4@company.com' },\n  { id: '5', name: 'Account 5', email: 'account5@company.com' }\n];\n\n// Get the current item index\nconst itemIndex = $itemIndex;\n\n// Assign account based on round-robin (distribute evenly)\nconst assignedAccount = emailAccounts[itemIndex % emailAccounts.length];\n\n// Return original data with assigned account\nreturn {\n  ...items[0].json,\n  AssignedAccountId: assignedAccount.id,\n  AssignedAccountName: assignedAccount.name,\n  AssignedAccountEmail: assignedAccount.email\n};"
+      },
+      "name": "Assign Email Account (Round-Robin)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 400],
+      "notes": "Distributes emails evenly across 5 accounts"
+    },
+    {
+      "parameters": {
+        "url": "={{$json.Website}}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Scrape Company Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1250, 400],
+      "notes": "Fetches website content to identify industry"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {
+          "systemMessage": "You are an industry classification expert. Analyze the website content and classify the company into ONE of these categories: IT, Automotive, Pharma, Manufacturing, or Other. Respond with ONLY the category name."
+        },
+        "text": "={{`Classify this company based on their website content:\n\nWebsite: ${$json.Website}\nContent: ${$('Scrape Company Website').item.json.body.substring(0, 2000)}\n\nRespond with ONE word: IT, Automotive, Pharma, Manufacturing, or Other`}}"
+      },
+      "name": "AI - Classify Industry",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1450, 400],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI account"
+        }
+      },
+      "notes": "Uses AI to determine company industry"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "industry",
+              "name": "Industry",
+              "type": "string",
+              "value": "={{$json.message.content.trim()}}"
+            }
+          ]
+        }
+      },
+      "name": "Store Industry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1650, 400]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {
+          "systemMessage": "You are an expert corporate training content writer for an EduTech company. Create personalized email content for companies based on their industry. The email should:\n\n1. Have a professional, warm greeting\n2. Include 5-7 relevant training courses specific to their industry\n3. Highlight 4-5 key benefits of choosing our training\n4. End with a clear call-to-action for a 15-minute discovery call\n5. Be concise (250-350 words)\n6. Use bullet points for courses and benefits\n\nIndustry-specific courses:\n- IT: Azure, AWS, Data Engineering, Java, Python, AI/ML, Full-Stack Development, DevOps, Cybersecurity, Cloud Computing\n- Automotive: EV Technology, ADAS, Embedded Systems, AutoCAD, CATIA, Lean Manufacturing, Quality Standards (IATF 16949)\n- Pharma: GMP, FDA Compliance, Pharmacovigilance, Clinical Research, Quality Management (ISO 13485), Data Integrity\n- Manufacturing: Lean Manufacturing, Six Sigma, TPM, Supply Chain, Quality Control, Industrial Automation, PLC\n- Other: Leadership, Project Management, Soft Skills, Business Analytics, Sales & Marketing, HR Management"
+        },
+        "text": "={{`Generate email body content for a ${$json.Industry} company.\n\nCompany Website: ${$('Scrape Company Website').item.json.Website}\n\nCreate engaging, personalized content that highlights our training programs relevant to their ${$json.Industry} industry. Focus on practical value and ROI.`}}"
+      },
+      "name": "AI - Generate Email Content",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1850, 400],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI account"
+        }
+      },
+      "notes": "Generates personalized email body based on industry"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "email_subject",
+              "name": "EmailSubject",
+              "type": "string",
+              "value": "Transform Your Team with Industry-Leading Training Programs"
+            },
+            {
+              "id": "email_body",
+              "name": "EmailBody",
+              "type": "string",
+              "value": "={{`Hi Team,\n\nI hope this email finds you well.\n\n${$json.message.content}\n\nBest regards,\n[Your Name]\n[Your Title]\n[Your EduTech Company]\n[Phone Number]\n[Email Address]\n[Website]`}}"
+            },
+            {
+              "id": "email",
+              "name": "Email",
+              "type": "string",
+              "value": "={{$('Scrape Company Website').item.json.Email}}"
+            },
+            {
+              "id": "website",
+              "name": "Website",
+              "type": "string",
+              "value": "={{$('Scrape Company Website').item.json.Website}}"
+            },
+            {
+              "id": "industry",
+              "name": "DetectedIndustry",
+              "type": "string",
+              "value": "={{$('Store Industry').item.json.Industry}}"
+            },
+            {
+              "id": "assigned_account",
+              "name": "AssignedAccountId",
+              "type": "string",
+              "value": "={{$('Scrape Company Website').item.json.AssignedAccountId}}"
+            },
+            {
+              "id": "assigned_email",
+              "name": "AssignedAccountEmail",
+              "type": "string",
+              "value": "={{$('Scrape Company Website').item.json.AssignedAccountEmail}}"
+            }
+          ]
+        }
+      },
+      "name": "Compose Final Email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [2050, 400],
+      "notes": "Standard subject + AI content + standard signature"
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.AssignedAccountId}}",
+                    "rightValue": "1",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Account1"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.AssignedAccountId}}",
+                    "rightValue": "2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Account2"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.AssignedAccountId}}",
+                    "rightValue": "3",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Account3"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.AssignedAccountId}}",
+                    "rightValue": "4",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Account4"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{$json.AssignedAccountId}}",
+                    "rightValue": "5",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Account5"
+            }
+          ]
+        }
+      },
+      "name": "Route to Email Account",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [2250, 400],
+      "notes": "Routes to correct Outlook account"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": {
+          "subject": "={{$json.EmailSubject}}",
+          "bodyContent": "={{$json.EmailBody}}",
+          "bodyContentType": "text",
+          "toRecipients": "={{$json.Email}}"
+        }
+      },
+      "name": "Send from Account 1",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [2450, 100],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "1",
+          "name": "Outlook Account 1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": {
+          "subject": "={{$json.EmailSubject}}",
+          "bodyContent": "={{$json.EmailBody}}",
+          "bodyContentType": "text",
+          "toRecipients": "={{$json.Email}}"
+        }
+      },
+      "name": "Send from Account 2",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [2450, 250],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "2",
+          "name": "Outlook Account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": {
+          "subject": "={{$json.EmailSubject}}",
+          "bodyContent": "={{$json.EmailBody}}",
+          "bodyContentType": "text",
+          "toRecipients": "={{$json.Email}}"
+        }
+      },
+      "name": "Send from Account 3",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [2450, 400],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "3",
+          "name": "Outlook Account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": {
+          "subject": "={{$json.EmailSubject}}",
+          "bodyContent": "={{$json.EmailBody}}",
+          "bodyContentType": "text",
+          "toRecipients": "={{$json.Email}}"
+        }
+      },
+      "name": "Send from Account 4",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [2450, 550],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "4",
+          "name": "Outlook Account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": {
+          "subject": "={{$json.EmailSubject}}",
+          "bodyContent": "={{$json.EmailBody}}",
+          "bodyContentType": "text",
+          "toRecipients": "={{$json.Email}}"
+        }
+      },
+      "name": "Send from Account 5",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [2450, 700],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "5",
+          "name": "Outlook Account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "YOUR_SPREADSHEET_ID",
+        "sheetName": "Sheet1",
+        "columns": {
+          "mappingsUi": {
+            "values": [
+              {
+                "column": "Status",
+                "value": "Sent"
+              },
+              {
+                "column": "SentDate",
+                "value": "={{$now.format('yyyy-MM-dd HH:mm:ss')}}"
+              },
+              {
+                "column": "DetectedIndustry",
+                "value": "={{$json.DetectedIndustry}}"
+              },
+              {
+                "column": "SentFromAccount",
+                "value": "={{$json.AssignedAccountEmail}}"
+              }
+            ]
+          }
+        },
+        "options": {
+          "lookupColumn": "Email",
+          "lookupValue": "={{$json.Email}}"
+        }
+      },
+      "name": "Update Excel Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2650, 400],
+      "notes": "Tracks which account sent the email"
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "minutes"
+      },
+      "name": "Rate Limit Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [2650, 600],
+      "notes": "1 minute delay between emails"
+    }
+  ],
+  "connections": {
+    "Schedule - Mon to Fri 9 AM": {
+      "main": [
+        [
+          {
+            "node": "Read Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel File": {
+      "main": [
+        [
+          {
+            "node": "Filter Unsent Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Unsent Only": {
+      "main": [
+        [
+          {
+            "node": "Limit to 100 per Day",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit to 100 per Day": {
+      "main": [
+        [
+          {
+            "node": "Assign Email Account (Round-Robin)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign Email Account (Round-Robin)": {
+      "main": [
+        [
+          {
+            "node": "Scrape Company Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Company Website": {
+      "main": [
+        [
+          {
+            "node": "AI - Classify Industry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI - Classify Industry": {
+      "main": [
+        [
+          {
+            "node": "Store Industry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Industry": {
+      "main": [
+        [
+          {
+            "node": "AI - Generate Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI - Generate Email Content": {
+      "main": [
+        [
+          {
+            "node": "Compose Final Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Final Email": {
+      "main": [
+        [
+          {
+            "node": "Route to Email Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route to Email Account": {
+      "main": [
+        [
+          {
+            "node": "Send from Account 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send from Account 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send from Account 3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send from Account 4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send from Account 5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send from Account 1": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send from Account 2": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send from Account 3": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send from Account 4": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send from Account 5": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "Update Excel Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
+
+
+
+
+Key Features:
+1. Round-Robin Distribution
+
+Automatically assigns each client to one of 5 email accounts evenly
+Client #1 → Account 1
+Client #2 → Account 2
+Client #3 → Account 3
+Client #4 → Account 4
+Client #5 → Account 5
+Client #6 → Account 1 (cycle repeats)
+
+2. No Duplicate Emails
+
+Each client gets assigned to only ONE email account
+The Excel tracks SentFromAccount column to record which account sent the email
+Once Status = Sent, that client is filtered out permanently
+
+3. 5 Separate Outlook Connections
+You need to set up 5 different Outlook OAuth2 credentials in n8n:
+
+Account 1: account1@company.com
+Account 2: account2@company.com
+Account 3: account3@company.com
+Account 4: account4@company.com
+Account 5: account5@company.com
+
+4. Excel Structure Required
+Your Excel must have these columns:
+
+Email (client email address)
+Website (client website URL)
+Status (empty initially, becomes "Sent")
+SentDate (auto-filled with timestamp)
+DetectedIndustry (auto-filled: IT/Automotive/Pharma/Manufacturing/Other)
+SentFromAccount (tracks which email account sent it, e.g., "account1@company.com")
+
+5. How It Works
+
+100 clients per day (20 emails per account)
+Round-robin assigns each client to an account
+Routes to the correct Outlook credential
+Sends email
+Updates Excel with account info
+1-minute delay before next email
+
+Setup Steps:
+
+Add 5 Outlook OAuth2 credentials in n8n settings
+Update the Code node with your actual email addresses:
+
+javascriptconst emailAccounts = [
+  { id: '1', name: 'Account 1', email: 'your-email-1@company.com' },
+  { id: '2', name: 'Account 2', email: 'your-email-2@company.com' },
+  { id: '3', name: 'Account 3', email: 'your-email-3@company.com' },
+  { id: '4', name: 'Account 4', email: 'your-email-4@company.com' },
+  { id: '5', name: 'Account 5', email: 'your-email-5@company.com' }
+];
+
+Configure each "Send from Account X" node with the respective credential
+
+This ensures zero duplicate emails and even distribution across all 5 accounts!
