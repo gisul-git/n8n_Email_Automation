@@ -1,0 +1,373 @@
+{
+  "name": "AI-Powered Industry-Based Email Outreach",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "name": "Schedule - Mon to Fri 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 400],
+      "notes": "Runs Monday to Friday at 9 AM"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileFormat": "autodetect",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "name": "Read Excel File",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [450, 400],
+      "notes": "Upload Excel with columns: Email, Website, Status, SentDate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.Status}}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "name": "Filter Unsent Only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 1,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "maxItems": 100
+      },
+      "name": "Limit to 100 per Day",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.Website}}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "Scrape Company Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1050, 400],
+      "notes": "Fetches website content to identify industry"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {
+          "systemMessage": "You are an industry classification expert. Analyze the website content and classify the company into ONE of these categories: IT, Automotive, Pharma, Manufacturing, or Other. Respond with ONLY the category name."
+        },
+        "text": "={{`Classify this company based on their website content:\n\nWebsite: ${$json.Website}\nContent: ${$('Scrape Company Website').item.json.body.substring(0, 2000)}\n\nRespond with ONE word: IT, Automotive, Pharma, Manufacturing, or Other`}}"
+      },
+      "name": "AI - Classify Industry",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI account"
+        }
+      },
+      "notes": "Uses AI to determine company industry"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "industry",
+              "name": "Industry",
+              "type": "string",
+              "value": "={{$json.message.content.trim()}}"
+            }
+          ]
+        }
+      },
+      "name": "Store Industry",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1450, 400]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {
+          "systemMessage": "You are an expert corporate training content writer for an EduTech company. Create personalized email content for companies based on their industry. The email should:\n\n1. Have a professional, warm greeting\n2. Include 5-7 relevant training courses specific to their industry\n3. Highlight 4-5 key benefits of choosing our training\n4. End with a clear call-to-action for a 15-minute discovery call\n5. Be concise (250-350 words)\n6. Use bullet points for courses and benefits\n\nIndustry-specific courses:\n- IT: Azure, AWS, Data Engineering, Java, Python, AI/ML, Full-Stack Development, DevOps, Cybersecurity, Cloud Computing\n- Automotive: EV Technology, ADAS, Embedded Systems, AutoCAD, CATIA, Lean Manufacturing, Quality Standards (IATF 16949)\n- Pharma: GMP, FDA Compliance, Pharmacovigilance, Clinical Research, Quality Management (ISO 13485), Data Integrity\n- Manufacturing: Lean Manufacturing, Six Sigma, TPM, Supply Chain, Quality Control, Industrial Automation, PLC\n- Other: Leadership, Project Management, Soft Skills, Business Analytics, Sales & Marketing, HR Management"
+        },
+        "text": "={{`Generate email body content for a ${$json.Industry} company.\n\nCompany Website: ${$('Scrape Company Website').item.json.Website}\n\nCreate engaging, personalized content that highlights our training programs relevant to their ${$json.Industry} industry. Focus on practical value and ROI.`}}"
+      },
+      "name": "AI - Generate Email Content",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1650, 400],
+      "credentials": {
+        "openAiApi": {
+          "id": "1",
+          "name": "OpenAI account"
+        }
+      },
+      "notes": "Generates personalized email body based on industry"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "email_subject",
+              "name": "EmailSubject",
+              "type": "string",
+              "value": "Transform Your Team with Industry-Leading Training Programs"
+            },
+            {
+              "id": "email_body",
+              "name": "EmailBody",
+              "type": "string",
+              "value": "={{`Hi Team,\n\nI hope this email finds you well.\n\n${$json.message.content}\n\nBest regards,\n[Your Name]\n[Your Title]\n[Your EduTech Company]\n[Phone Number]\n[Email Address]\n[Website]`}}"
+            },
+            {
+              "id": "email",
+              "name": "Email",
+              "type": "string",
+              "value": "={{$('Scrape Company Website').item.json.Email}}"
+            },
+            {
+              "id": "website",
+              "name": "Website",
+              "type": "string",
+              "value": "={{$('Scrape Company Website').item.json.Website}}"
+            },
+            {
+              "id": "industry",
+              "name": "DetectedIndustry",
+              "type": "string",
+              "value": "={{$('Store Industry').item.json.Industry}}"
+            }
+          ]
+        }
+      },
+      "name": "Compose Final Email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1850, 400],
+      "notes": "Standard subject + AI content + standard signature"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "message": {
+          "subject": "={{$json.EmailSubject}}",
+          "bodyContent": "={{$json.EmailBody}}",
+          "bodyContentType": "text",
+          "toRecipients": "={{$json.Email}}"
+        }
+      },
+      "name": "Send Outlook Email",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [2050, 400],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "1",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": "YOUR_SPREADSHEET_ID",
+        "sheetName": "Sheet1",
+        "columns": {
+          "mappingsUi": {
+            "values": [
+              {
+                "column": "Status",
+                "value": "Sent"
+              },
+              {
+                "column": "SentDate",
+                "value": "={{$now.format('yyyy-MM-dd HH:mm:ss')}}"
+              },
+              {
+                "column": "DetectedIndustry",
+                "value": "={{$json.DetectedIndustry}}"
+              }
+            ]
+          }
+        },
+        "options": {
+          "lookupColumn": "Email",
+          "lookupValue": "={{$json.Email}}"
+        }
+      },
+      "name": "Update Excel Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2250, 400],
+      "notes": "Updates Status, SentDate, and DetectedIndustry"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "name": "Rate Limit Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [2050, 550],
+      "notes": "2 second delay between emails to avoid spam flags"
+    }
+  ],
+  "connections": {
+    "Schedule - Sat & Sun 9 AM": {
+      "main": [
+        [
+          {
+            "node": "Read Excel File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel File": {
+      "main": [
+        [
+          {
+            "node": "Filter Unsent Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Unsent Only": {
+      "main": [
+        [
+          {
+            "node": "Limit to 100 per Day",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit to 100 per Day": {
+      "main": [
+        [
+          {
+            "node": "Scrape Company Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Company Website": {
+      "main": [
+        [
+          {
+            "node": "AI - Classify Industry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI - Classify Industry": {
+      "main": [
+        [
+          {
+            "node": "Store Industry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Industry": {
+      "main": [
+        [
+          {
+            "node": "AI - Generate Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI - Generate Email Content": {
+      "main": [
+        [
+          {
+            "node": "Compose Final Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Final Email": {
+      "main": [
+        [
+          {
+            "node": "Send Outlook Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Outlook Email": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "Update Excel Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
+
+
+
+
+
+
